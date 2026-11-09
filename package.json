@@ -1,0 +1,75 @@
+{
+  "name": "dsh-agent-gate",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI 管 AI 的唯一闸门：方案先准许再动手 + 计划表与 progress + 编排者/worker 契约 + 子代理模板库 + 全局边界与 skill 限制 + 新指令终止/追加判定",
+  "keywords": [
+    "agent-registry",
+    "agent-safety",
+    "approval",
+    "bundle",
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "guardrail",
+    "orchestrator",
+    "persistence",
+    "plugin",
+    "state",
+    "subagent"
+  ],
+  "license": "MIT",
+  "author": "YG",
+  "homepage": "https://github.com/2055580254/dsh-agent-gate",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/2055580254/dsh-agent-gate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/2055580254/dsh-agent-gate/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./prompts/*": "./prompts/*"
+  },
+  "files": [
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md",
+    "cordis.patch.yml",
+    "docs/architecture.md",
+    "docs/config.md",
+    "docs/habits.example.json",
+    "docs/install.md",
+    "docs/publish.md",
+    "icon.svg",
+    "index.js",
+    "lib/orchestrator.js",
+    "lib/policy.js",
+    "locale/en.json",
+    "locale/zh.json",
+    "prompts/orchestrator.md",
+    "prompts/worker.md",
+    "scripts/publish.ps1",
+    "scripts/publish.sh",
+    "scripts/selftest.mjs",
+    "scripts/set-owner.ps1"
+  ],
+  "scripts": {
+    "selftest": "node scripts/selftest.mjs",
+    "check": "node --check index.js && node --check lib/policy.js && node scripts/selftest.mjs",
+    "publish:dry": "pwsh -File scripts/publish.ps1 -User GH_USER -DryRun"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

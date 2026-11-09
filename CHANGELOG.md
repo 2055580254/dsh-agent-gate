@@ -1,0 +1,118 @@
+# 变更记录
+
+遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
+
+## 2.0.0 — 2026-11-09
+
+合并 `dsh-task-guard` 与 `@local/preset-supervisor` 为一个 bundle：一个注入点、一套配置、一套工具。
+
+**新增**
+- `lib/orchestrator.js`：编排者契约（五个动作 / 派发三段 / 验收七维 / 返工上限）以 `installOrchestrator(ctx, config)` 挂进主包，返回 `{ order, enabled, injectOrchestrator, injectWorker, verify, render(context) }`。
+- 合并配置键：`injectOrchestrator`、`injectWorker`、`taskGuard`、`verifyStandard`、`registry`、`agentDir`、`orchestratorText`、`workerText`。
+- `agent_registry` 并入本包；模板库仍落 `$DSH_HOME/preset-supervisor/agents`，旧数据无需迁移。
+
+**变更**
+- systemPrompt 只注入一个 section（`agent-gate:protocol`）：编排契约 + 闸门协议合成一段，删掉两段 ADAPTER 与 `withAdapter`。
+- 闸门增 `isSubagentSession()`：认 `session.header.origin === 'subagent'`，子代理不再恒被判成「未立项」。
+- `agent/inbox/inserted` 增 `isDelegatedReport()`：worker 回报（`【结论】/【进度】/【未决】` 或 meta 标记）不再触发指令判定。
+
+**删除**
+- `preset-supervisor` 独立 bundle、其 `cordis.patch.yml` insert 段、`prompts/` 自注册 section。
+
+**自测** 51 项全绿（新增 4 条：编排键默认值、`injectOrchestrator:false` 连 worker 一起关、源码只有一个 `sp.section(`、假宿主装配断言 5 工具 + 1 section + 1 context）。
+
+## 1.4.0 — 2026-11-07
+
+### 新增
+
+- **状态持久化**：`stateDirPath()` / `loadPersistedStates()` / `makeStateSaver()` / `exportState()`。
+  只导出 `phase !== idle` 的会话；600ms 防抖写盘，落盘失败只记日志不影响主流程；`history` 截 50 条。
+  重载插件（关-开）或重启 DSH 后恢复：`phase` / `plan` / `steps` / `stepIndex` / `boundaries` / `actionCount`。
+- **配置 `statePath`**：默认 `$DSH_PROFILE_DIR/task-guard/state`，回退 `~/.dsh/task-guard/state`。
+- **`task_guard_status(action=export)`** ＋ **`/taskguard export`**：导出 `export-<会话>-<时间戳>.json`。
+- **`trimHabits(habits, limit=200)`**：习惯库按权重保留前 200 条，普通保存路径自动调用。
+- **`maxSteps` 生效**：超过上限时截断步骤并在 `notes` 里提示「其余请另行立项」。
+
+### 修复 / 对齐
+
+- 组件层补齐 1.3.0：彻底删除 `awaiting_step` 阶段引用、`askStep` / `requestStep` / 异步 `afterAdvance`
+  （换成同步 `afterAdvance(state, advanced)`）、`stepApproved` / `stepGateAt`、`stepGating` / `stepApprovalMode`、
+  `/taskguard next`、inbox 的「回一句继续即授权」分支。
+- 残留扫描 `STEP_AWAITING|stepApproved|stepGateAt|stepGating|stepApprovalMode|awaiting_step|askStep|requestStep|PHASE.STEP`
+  在 `index.js` / `lib/policy.js` = **0 处**。
+- 自测：**47 项全部通过**（新增 `trimHabits` 断言，改写分步相关 6 项）。
+
+## 1.3.0 — 2026-11-05
+
+### 变更：去掉「每步再授权」，只留计划表 + progress
+按用户要求：只保留写计划表与 progress，做完一步不再索要授权。
+
+- **删除 `PHASE.STEP_AWAITING`**（`awaiting_step` 阶段）及其 `PHASE_LABEL` 条目。
+- **删除分步闸门**：`decideGate` 的 3b) 分支（deny code `step-approval`）与 `no-approval` 对 `awaiting_step` 的显式豁免一并移除。
+- **删除授权状态**：`state.stepApproved`、`state.stepGateAt`；`advanceStep` 不再清授权标记。
+- **删除两张授权卡**：`askStep` / `requestStep`；`afterAdvance` 改为同步 `(state, advanced)`——`complete` / `skip` 之后直接推进：有下一步就 `phase=executing` 并返回 `step-done` + 下一步提示，没有就 `phase=approved` + `all-done`。
+- **`task_step` 收敛为四个动作**：`progress` / `complete` / `skip` / `reset`（`start` 删除）。
+- **删除文字降级路径**：`agent/inbox/inserted` 里「`awaiting_step` + 准许措辞 → 授权该步」整块移除。
+- **删除 `/taskguard next`**，命令助记、`description`、兜底文本同步更新。
+- **删除配置** `stepGating`、`stepApprovalMode`（写了也被忽略）；保留 `maxSteps`。
+- `task_instruction`：`append` 不再接受 `awaiting_step`；`resume` 不再重算 `stepApproved`；`new_task` 清理计划表时不再清授权字段。
+
+### 保留
+- 计划表 `state.steps[]`（`index` / `text` / `status` / `startedAt` / `doneAt` / `summary`）、`stepIndex`、`initSteps`、`currentStep`、`hasNextStep`、`stepStats`、`advanceStep`。
+- `renderProgress(state)`：`进度 2/6 ░░░░░░░░░░` + `✅/⏭/▶` 标记 + 每步摘要，接入 `task_step`、`task_guard_status(action=steps)`、`/taskguard step` 与每轮注入的动态状态 context。
+- `PROTOCOL_TOOLS` 仍含 `task_step`。
+
+### 自测
+- 分步相关断言改写为 1.3.0 语义（无授权态、执行阶段照常放行、`stepGating` / `stepApprovalMode` 已不存在），**46 项全部通过**。
+
+## 1.2.0 — 2026-11-04（历史：本节的分步授权已被 1.3.0 删除）
+
+### 新增：分步执行（计划表 · progress · 每步授权）
+- 方案里的 `steps` 在获准后展开成**可跟踪的计划表**：`state.steps[]`（每步 `{index, text, status, startedAt, doneAt, summary}`）、`stepIndex`、`stepApproved`。
+- **新工具 `task_step`**：`progress`（进度条＋计划表＋每步摘要）／`complete`（本步收尾并请示下一步）／`start`（请求或确认当前步授权）／`skip`（跳过）／`reset`（退回第 1 步）。已加入 `PROTOCOL_TOOLS`，否则等待期会自锁。
+- **新阶段 `awaiting_step`**（`PHASE.STEP_AWAITING`）：一步收尾后进入「等待授权下一步」，闸门在这一阶段拒绝一切变更类工具（code `step-approval`），只放行 `PROTOCOL_TOOLS` 与只读工具；从 `no-approval` 判定里显式豁免（它算「已立项已准许，只是下一步未授权」）。
+- **第一步随方案准许一起授权**，之后每步都要重新授权；`advanceStep` 收尾后自动清空 `stepApproved`。
+- **`renderProgress(state)`**：`进度 2/6 ▓▓▓▓░░░░░░` ＋ `✅/⏭/▶/⏸` 四种标记 ＋ 等授权提示；接入 `task_step`、`task_guard_status(action=steps)`、`/taskguard step`、以及每轮注入的动态状态 context。
+- `task_instruction`：`append` 现在也接受 `awaiting_step` 阶段（在等授权时提追加要求不必重新立项）；`new_task` 清理计划表；`resume` 恢复时保留当前步位置。
+- `/taskguard next`：人肉授权当前这一步（弹卡点不到/超时时的救命路径，写 `history` 与 `step-approve`）。
+- 文字降级路径：`awaiting_step` 阶段用户回「继续/下一步」即视为授权（`inbox/inserted` 里判定，仍受 `answerGraceMs` 防回灌保护）。
+- `skip` 不连环弹卡：跳过之后只把下一步写给用户，避免一次点错连弹五张。
+- 配置：`stepGating`（默认 `true`；`false` 退回 1.1.0 的自由推进，`complete` 只记账）、`stepApprovalMode`（`ask` 自动弹卡 / `manual` 只文字请示）、`maxSteps`（0=不限）。
+
+### 修复
+- `decideGate` 的 `no-approval` 分支不再误拦 `awaiting_step`（原先会被当成「未立项」）。
+
+### 自测
+- 新增 10 项断言（initSteps、advanceStep 的 done/skip/finished、stepStats、renderProgress、awaiting_step 闸门矩阵、stepGating=false、配置默认、renderState 进度行、task_step 属协议工具），合计 **47 项全部通过**。
+
+## 1.1.0 — 2026-10-31
+
+### 修复（界面）
+- **准许卡撑满界面、按钮点不到**：问句从「整份方案多行文本」压成单行 `方案#N｜目标（N 步 · 预算 N）`，完整方案移入 `detail` 折叠区。新增 `compactApproval`（默认 `true`）、`maxApprovalSummaryChars`（默认 110，下限 40）、`approvalDetail`（默认 `true`）三项配置。
+
+### 修复（逻辑）
+- `gateSubagents` 从死配置改为三档生效：`inherit`（默认，子代理沿用最近一次人类准许的边界，硬边界仍生效）/ `gate` / `allow`。旧写法 `true → inherit`、`false → allow`。
+- `profile`（`lite` / `standard` / `strict`）真正影响执行：`lite` 强制不设预算，`strict` 收紧工具面并在方案未写预算时回落到 40。
+- 内容型参数不再误拦：`write.content`、`edit.new_string`、`text`、`prompt` 等正文类参数豁免路径/命令扫描；`compress` 等上下文工具归入只读。
+- 路径匹配加入边界检查，`D:\archive` 不再命中 `D:\archive2`、`D:\archive-2024`。
+- 失败不再消耗动作预算：`tools/result` 中 `isError === true` 时按 `callId` 回滚计数。
+- `task_plan` 加并发锁，上一张准许卡未处理时返回 `status=busy`，不再互相覆盖。
+- `task_instruction` 新增 `kind=resume`：终止后可恢复原方案，预算重置，不重新弹窗。
+- 终止措辞补充「算了 / 不做了 / 别弄了 / 别改了 / 收工 / 停一下 / 先停」。
+- 新增 `action=habits-reset` 与 `/taskguard habits reset`。
+
+### 文档
+- README 增补 v1.1.0 对照表、故障排查、`resume` / `busy` 说明。
+- `docs/config.md` 重写 `gateSubagents` 三档，新增「准许框体积」「profile 档位」。
+- `docs/architecture.md` 新增「参数分类（防误拦）」「子代理策略」「预算与失败回滚」，状态机补 `resume` 边。
+
+## 1.0.0 — 2026-10-31
+
+首个可用版本。
+
+- `tools/pre-execute` 准入闸门：未获准许时拒绝变更类工具，拒绝原因写明缺哪一步。
+- 四层边界：全局硬边界（受保护路径 / 危险命令 / 硬禁工具）+ 方案边界（allowedTools / forbiddenTools / forbiddenPaths / maxActions）+ `allowedSkills` + 习惯库自动提升。
+- 三工具：`task_plan`（立项与准许）、`task_instruction`（新指令判定 terminate / append / resume / new_task / question）、`task_guard_status`（查看状态与习惯库）。
+- 系统提示注入「任务闸门协议」段与动态状态行，人用命令 `/taskguard`。
+- 习惯库：至少 8 种措辞的终止/准许识别，权重累积后自动并入边界。
+- 纯策略层 `lib/policy.js` 与 23 项自测。

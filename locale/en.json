@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "dsh-agent-gate",
+    "description": "Task gate + orchestration"
+  }
+}
